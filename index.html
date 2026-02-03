@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microsoft Core IO — Infrastructure Optimization Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e17;--surface:#111827;--surface2:#1a2332;--surface3:#1f2b3d;
+  --border:#2a3a52;--border-active:#3b82f6;
+  --text:#e2e8f0;--text-muted:#94a3b8;--text-dim:#64748b;
+  --accent:#3b82f6;--accent-glow:rgba(59,130,246,.25);
+  --green:#10b981;--green-glow:rgba(16,185,129,.2);
+  --amber:#f59e0b;--amber-glow:rgba(245,158,11,.2);
+  --red:#ef4444;--red-glow:rgba(239,68,68,.2);
+  --purple:#8b5cf6;--purple-glow:rgba(139,92,246,.2);
+  --cyan:#06b6d4;--cyan-glow:rgba(6,182,212,.15);
+  --radius:10px;--radius-lg:16px;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;line-height:1.6;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 0%,rgba(59,130,246,.06),transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%,rgba(139,92,246,.04),transparent);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+/* Header */
+.header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(10,14,23,.85);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);padding:16px 0;
+}
+.header-inner{
+  max-width:1100px;margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{
+  width:38px;height:38px;border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),var(--purple));
+  display:grid;place-items:center;font-family:'JetBrains Mono',monospace;
+  font-weight:700;font-size:14px;color:#fff;letter-spacing:-1px;
+}
+.logo-text h1{font-size:16px;font-weight:700;letter-spacing:-.3px;line-height:1.2}
+.logo-text span{font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Buttons */
+.btn{
+  font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;
+  padding:8px 16px;border-radius:8px;border:none;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .2s;
+  letter-spacing:.2px;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#2563eb;box-shadow:0 0 20px var(--accent-glow)}
+.btn-outline{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#059669;box-shadow:0 0 20px var(--green-glow)}
+.btn svg{width:16px;height:16px}
+
+/* Progress Bar */
+.progress-strip{
+  max-width:1100px;margin:0 auto;padding:20px 24px 0;
+}
+.progress-info{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.progress-info span{font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace}
+.progress-bar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));border-radius:2px;transition:width .4s ease;width:0%}
+
+/* Main Layout */
+.main{max-width:1100px;margin:0 auto;padding:24px;display:flex;gap:24px}
+.sidebar{
+  width:260px;flex-shrink:0;position:sticky;top:90px;align-self:flex-start;
+  max-height:calc(100vh - 110px);overflow-y:auto;
+}
+.content{flex:1;min-width:0}
+
+/* Sidebar Nav */
+.nav-section{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:8px;margin-bottom:16px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  border-radius:var(--radius);cursor:pointer;transition:all .2s;
+  font-size:13px;font-weight:500;color:var(--text-muted);
+}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(59,130,246,.1);color:var(--accent)}
+.nav-item.completed .nav-dot{background:var(--green);box-shadow:0 0 8px var(--green-glow)}
+.nav-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--border);
+  flex-shrink:0;transition:all .3s;
+}
+.nav-item.active .nav-dot{background:var(--accent);box-shadow:0 0 8px var(--accent-glow)}
+.nav-count{
+  margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;
+  color:var(--text-dim);background:var(--surface2);padding:2px 6px;border-radius:4px;
+}
+
+/* Score Card */
+.score-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:20px;text-align:center;
+}
+.score-card h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;font-family:'JetBrains Mono',monospace}
+.score-ring{
+  width:100px;height:100px;margin:0 auto 12px;position:relative;
+}
+.score-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.score-ring circle{fill:none;stroke-width:6;stroke-linecap:round}
+.score-ring .bg{stroke:var(--surface2)}
+.score-ring .fg{stroke:var(--accent);transition:stroke-dashoffset .6s ease}
+.score-value{
+  position:absolute;inset:0;display:grid;place-items:center;
+  font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;
+}
+.maturity-label{
+  display:inline-block;font-size:13px;font-weight:600;padding:4px 12px;
+  border-radius:20px;margin-top:4px;
+}
+.maturity-basic{background:rgba(239,68,68,.1);color:var(--red)}
+.maturity-standardized{background:rgba(245,158,11,.1);color:var(--amber)}
+.maturity-rationalized{background:rgba(59,130,246,.1);color:var(--accent)}
+.maturity-dynamic{background:rgba(16,185,129,.1);color:var(--green)}
+
+/* Section */
+.section{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:28px;margin-bottom:20px;
+  animation:fadeIn .3s ease;
+}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.section-header{margin-bottom:24px;display:flex;align-items:flex-start;gap:14px}
+.section-icon{
+  width:42px;height:42px;border-radius:10px;display:grid;place-items:center;
+  font-size:20px;flex-shrink:0;
+}
+.section-header h2{font-size:20px;font-weight:700;letter-spacing:-.3px;line-height:1.3}
+.section-header p{font-size:13px;color:var(--text-muted);margin-top:2px}
+
+/* Question */
+.question{
+  padding:20px;border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:12px;transition:all .3s;
+}
+.question:hover{border-color:var(--border-active);background:rgba(59,130,246,.02)}
+.question.answered{border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.02)}
+.question-text{font-size:14px;font-weight:500;margin-bottom:14px;line-height:1.5}
+.question-num{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
+  margin-bottom:6px;letter-spacing:.5px;
+}
+.options{display:flex;flex-direction:column;gap:6px}
+.option{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border:1px solid var(--border);border-radius:8px;cursor:pointer;
+  transition:all .2s;font-size:13px;color:var(--text-muted);
+}
+.option:hover{border-color:var(--accent);background:rgba(59,130,246,.05);color:var(--text)}
+.option.selected{
+  border-color:var(--accent);background:rgba(59,130,246,.08);color:var(--text);
+  box-shadow:0 0 0 1px var(--accent);
+}
+.option-radio{
+  width:16px;height:16px;border-radius:50%;border:2px solid var(--border);
+  flex-shrink:0;display:grid;place-items:center;transition:all .2s;
+}
+.option.selected .option-radio{border-color:var(--accent);background:var(--accent)}
+.option.selected .option-radio::after{
+  content:'';width:6px;height:6px;border-radius:50%;background:#fff;
+}
+.option-level{
+  font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 6px;
+  border-radius:4px;margin-left:auto;flex-shrink:0;letter-spacing:.3px;
+}
+.level-1{background:rgba(239,68,68,.1);color:var(--red)}
+.level-2{background:rgba(245,158,11,.1);color:var(--amber)}
+.level-3{background:rgba(59,130,246,.1);color:var(--accent)}
+.level-4{background:rgba(16,185,129,.1);color:var(--green)}
+
+/* Navigation Buttons */
+.section-nav{display:flex;justify-content:space-between;margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}
+
+/* Welcome */
+.welcome{text-align:center;padding:60px 20px}
+.welcome h2{font-size:28px;font-weight:800;letter-spacing:-.5px;margin-bottom:12px;background:linear-gradient(135deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.welcome p{color:var(--text-muted);max-width:500px;margin:0 auto 8px;font-size:14px}
+.welcome .btn{margin-top:24px;padding:12px 28px;font-size:15px}
+
+/* Levels Legend */
+.legend{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  margin:24px 0;
+}
+.legend-item{
+  padding:12px;border-radius:var(--radius);text-align:center;
+  font-size:12px;font-weight:600;
+}
+.legend-item span{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px;font-weight:400}
+.legend-basic{background:rgba(239,68,68,.08);color:var(--red)}
+.legend-standard{background:rgba(245,158,11,.08);color:var(--amber)}
+.legend-rational{background:rgba(59,130,246,.08);color:var(--accent)}
+.legend-dynamic{background:rgba(16,185,129,.08);color:var(--green)}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:24px;right:24px;background:var(--surface2);
+  border:1px solid var(--green);color:var(--green);padding:12px 20px;
+  border-radius:var(--radius);font-size:13px;font-weight:500;
+  display:flex;align-items:center;gap:8px;z-index:999;
+  transform:translateY(100px);opacity:0;transition:all .3s;
+}
+.toast.show{transform:translateY(0);opacity:1}
+
+/* Responsive */
+@media(max-width:800px){
+  .main{flex-direction:column}
+  .sidebar{width:100%;position:static;max-height:none}
+  .legend{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:500px){
+  .section{padding:18px}
+  .header-inner{gap:8px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">IO</div>
+      <div class="logo-text">
+        <h1>Core IO Assessment</h1>
+        <span>Infrastructure Optimization Model</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-outline" onclick="resetAssessment()" title="Reset all answers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Reset
+      </button>
+      <button class="btn btn-outline" onclick="showGapAnalysis()" style="border-color:var(--purple);color:var(--purple)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        Gap Analysis
+      </button>
+      <button class="btn btn-success" onclick="exportReport()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+        Export Report
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="progress-strip">
+  <div class="progress-info">
+    <span>PROGRESS</span>
+    <span id="progressText">0 / 0 answered</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+</div>
+
+<div class="main">
+  <aside class="sidebar">
+    <nav class="nav-section" id="navSection"></nav>
+    <div class="score-card" id="scoreCard">
+      <h3>Overall Maturity</h3>
+      <div class="score-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg" cx="50" cy="50" r="42"/>
+          <circle class="fg" id="scoreCircle" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/>
+        </svg>
+        <div class="score-value" id="scoreValue">—</div>
+      </div>
+      <div id="maturityLabel"></div>
+    </div>
+  </aside>
+  <main class="content" id="contentArea"></main>
+</div>
+
+<div class="toast" id="toast">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+  <span id="toastText">Progress saved</span>
+</div>
+
+<script>
+// ===== CORE IO ASSESSMENT DATA =====
+const assessmentData = [
+  {
+    id: "identity",
+    title: "Identity & Access Management",
+    icon: "🔐",
+    iconBg: "linear-gradient(135deg,#3b82f6,#6366f1)",
+    description: "Directory services, authentication, and access control policies",
+    questions: [
+      {
+        q: "What is the current state of your directory service implementation?",
+        options: [
+          { text: "No centralized directory service; standalone workgroup-based systems", level: 1 },
+          { text: "Active Directory deployed with a single domain/forest for 80%+ of users", level: 2 },
+          { text: "AD fully deployed with Group Policy, OUs structured for delegation, and trust relationships managed", level: 3 },
+          { text: "Federated identity with Azure AD/Entra ID, SSO across cloud and on-prem, dynamic provisioning", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage user authentication across the organization?",
+        options: [
+          { text: "Local accounts on individual machines; no centralized authentication", level: 1 },
+          { text: "Centralized authentication via Active Directory for most users", level: 2 },
+          { text: "Multi-factor authentication (MFA) deployed for privileged and remote access", level: 3 },
+          { text: "Passwordless and adaptive authentication with conditional access policies, risk-based sign-in", level: 4 }
+        ]
+      },
+      {
+        q: "How are user accounts provisioned and deprovisioned?",
+        options: [
+          { text: "Manual creation and removal of accounts on each system individually", level: 1 },
+          { text: "Centralized account creation via AD; manual deprovisioning with some delay", level: 2 },
+          { text: "Semi-automated provisioning with HR integration; deprovisioning within defined SLAs", level: 3 },
+          { text: "Fully automated lifecycle management with identity governance, access reviews, and real-time deprovisioning", level: 4 }
+        ]
+      },
+      {
+        q: "What is the state of your privileged access management?",
+        options: [
+          { text: "Admin accounts shared or used for daily work; no separation of duties", level: 1 },
+          { text: "Dedicated admin accounts exist; basic separation from standard user accounts", level: 2 },
+          { text: "Privileged Access Workstations (PAWs), tiered admin model, and just-in-time elevation", level: 3 },
+          { text: "Full PAM solution with session recording, automated credential rotation, and zero standing access", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage access to applications and resources?",
+        options: [
+          { text: "Access managed per-application with separate credentials; no central policy", level: 1 },
+          { text: "Group-based access via AD for most resources; some applications still independent", level: 2 },
+          { text: "Role-based access control (RBAC) with regular access reviews and attestation", level: 3 },
+          { text: "Attribute-based access control (ABAC), dynamic policies, and automated least-privilege enforcement", level: 4 }
+        ]
+      },
+      {
+        q: "How is external/partner identity managed?",
+        options: [
+          { text: "Partners given internal accounts or VPN credentials; no guest management", level: 1 },
+          { text: "Basic guest accounts in AD with manual lifecycle management", level: 2 },
+          { text: "Azure AD B2B or federation for partner access with governance policies", level: 3 },
+          { text: "Automated B2B/B2C identity with entitlement management, access packages, and cross-org governance", level: 4 }
+        ]
+      }
+    ]
+  },
+  {
+    id: "desktop",
+    title: "Desktop, Device & Server Management",
+    icon: "🖥️",
+    iconBg: "linear-gradient(135deg,#06b6d4,#3b82f6)",
+    description: "Endpoint management, OS deployment, patching, and configuration",
+    questions: [
+      {
+        q: "How is your desktop/laptop OS deployment handled?",
+        options: [
+          { text: "Manual installation from media; each machine configured individually", level: 1 },
+          { text: "Standardized images deployed via tools like SCCM/MDT for most machines", level: 2 },
+          { text: "Zero-touch deployment with automated task sequences, driver management, and app layering", level: 3 },
+          { text: "Autopilot/cloud-based provisioning with dynamic configuration; user-driven, hardware-agnostic", level: 4 }
+        ]
+      },
+      {
+        q: "What is your approach to OS and application patching?",
+        options: [
+          { text: "No centralized patch management; updates left to end users or done ad-hoc", level: 1 },
+          { text: "WSUS or equivalent deployed; patches approved and deployed on a regular schedule", level: 2 },
+          { text: "Automated patch compliance reporting, phased rollouts, and exception management", level: 3 },
+          { text: "Continuous patching with automated testing, ring-based deployment, and real-time compliance dashboards", level: 4 }
+        ]
+      },
+      {
+        q: "How are your servers managed and configured?",
+        options: [
+          { text: "Servers built manually; configuration drift is common and untracked", level: 1 },
+          { text: "Standardized server builds; basic monitoring and manual change management", level: 2 },
+          { text: "Configuration management (DSC/Ansible/Chef); change control with drift detection", level: 3 },
+          { text: "Infrastructure as Code; immutable infrastructure patterns; auto-scaling and self-healing", level: 4 }
+        ]
+      },
+      {
+        q: "What is the status of your hardware and software asset inventory?",
+        options: [
+          { text: "No centralized inventory; assets tracked in spreadsheets or not at all", level: 1 },
+          { text: "Discovery tools deployed; basic inventory of hardware and installed software", level: 2 },
+          { text: "CMDB with automated discovery, license compliance tracking, and lifecycle management", level: 3 },
+          { text: "Real-time asset intelligence with financial optimization, automated lifecycle actions, and predictive replacement", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage mobile devices and BYOD?",
+        options: [
+          { text: "No mobile device management; personal devices access corporate resources freely", level: 1 },
+          { text: "Basic MDM for corporate devices; email access controlled via ActiveSync policies", level: 2 },
+          { text: "Full MDM/MAM with conditional access, app protection policies, and compliance checks", level: 3 },
+          { text: "Unified Endpoint Management with risk-based device trust, app-level containerization, and zero-trust device posture", level: 4 }
+        ]
+      },
+      {
+        q: "How do you handle application compatibility and virtualization?",
+        options: [
+          { text: "Application compatibility tested manually before each OS migration", level: 1 },
+          { text: "Application compatibility toolkit used; some apps virtualized", level: 2 },
+          { text: "App-V or equivalent for problematic apps; systematic compatibility testing in CI/CD pipeline", level: 3 },
+          { text: "Cloud-hosted desktops (AVD/W365), universal app delivery, and self-service app catalogs", level: 4 }
+        ]
+      }
+    ]
+  },
+  {
+    id: "security",
+    title: "Security & Networking",
+    icon: "🛡️",
+    iconBg: "linear-gradient(135deg,#f59e0b,#ef4444)",
+    description: "Threat protection, network security, and compliance posture",
+    questions: [
+      {
+        q: "What is your current approach to endpoint security?",
+        options: [
+          { text: "Basic or no antivirus; no centralized endpoint protection management", level: 1 },
+          { text: "Managed antivirus/anti-malware deployed across endpoints with central console", level: 2 },
+          { text: "EDR solution with behavioral detection, automated investigation, and threat hunting", level: 3 },
+          { text: "XDR platform integrating endpoint, email, identity, and cloud signals with automated response", level: 4 }
+        ]
+      },
+      {
+        q: "How is your network segmented and secured?",
+        options: [
+          { text: "Flat network with no segmentation; minimal firewall rules", level: 1 },
+          { text: "VLANs and basic firewall rules separating major zones (DMZ, internal, guest)", level: 2 },
+          { text: "Micro-segmentation, next-gen firewalls, IDS/IPS, and network access control (NAC)", level: 3 },
+          { text: "Zero-trust network access (ZTNA), software-defined perimeter, and continuous network verification", level: 4 }
+        ]
+      },
+      {
+        q: "What is your approach to vulnerability management?",
+        options: [
+          { text: "No regular vulnerability scanning; issues found reactively", level: 1 },
+          { text: "Periodic vulnerability scans with manual remediation tracking", level: 2 },
+          { text: "Continuous scanning with risk-based prioritization, SLA-driven remediation, and exception process", level: 3 },
+          { text: "Automated vulnerability management integrated with CI/CD, attack surface management, and threat intelligence", level: 4 }
+        ]
+      },
+      {
+        q: "How do you monitor security events and incidents?",
+        options: [
+          { text: "No centralized logging or security monitoring", level: 1 },
+          { text: "Centralized log collection; basic alerting on known signatures", level: 2 },
+          { text: "SIEM with correlation rules, dedicated SOC, and documented incident response procedures", level: 3 },
+          { text: "AI/ML-driven SIEM/SOAR with automated playbooks, threat intelligence feeds, and purple teaming", level: 4 }
+        ]
+      },
+      {
+        q: "What is your email and collaboration security posture?",
+        options: [
+          { text: "Basic spam filtering; no advanced threat protection for email", level: 1 },
+          { text: "Anti-spam and anti-malware gateway; basic DLP rules for email", level: 2 },
+          { text: "Advanced threat protection with safe links/attachments, anti-phishing policies, and user training", level: 3 },
+          { text: "Integrated cloud security broker (CASB), automated threat remediation, and real-time collaboration monitoring", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage compliance and security policies?",
+        options: [
+          { text: "No formal security policies; compliance addressed reactively to audits", level: 1 },
+          { text: "Documented security policies; annual compliance assessments", level: 2 },
+          { text: "Continuous compliance monitoring, automated policy enforcement, and regular third-party audits", level: 3 },
+          { text: "Integrated GRC platform, real-time compliance dashboards, automated evidence collection, and regulatory change management", level: 4 }
+        ]
+      }
+    ]
+  },
+  {
+    id: "dataprotection",
+    title: "Data Protection & Recovery",
+    icon: "💾",
+    iconBg: "linear-gradient(135deg,#10b981,#06b6d4)",
+    description: "Backup, disaster recovery, data classification, and business continuity",
+    questions: [
+      {
+        q: "What is the current state of your data backup solution?",
+        options: [
+          { text: "Backups performed manually or inconsistently; no verification of backup integrity", level: 1 },
+          { text: "Scheduled backups for critical servers; basic retention policies in place", level: 2 },
+          { text: "Centralized backup with automated verification, offsite copies, and defined RPO/RTO per tier", level: 3 },
+          { text: "Continuous data protection, immutable backups, air-gapped copies, and automated DR orchestration", level: 4 }
+        ]
+      },
+      {
+        q: "How is your disaster recovery (DR) capability?",
+        options: [
+          { text: "No documented DR plan; recovery would be ad-hoc in a disaster", level: 1 },
+          { text: "Documented DR plan for critical systems; tested annually at best", level: 2 },
+          { text: "DR plan with regular testing, automated failover for tier-1 systems, and defined RTO/RPO", level: 3 },
+          { text: "Fully automated DR orchestration, continuous replication, sub-hour RTO, and chaos engineering practices", level: 4 }
+        ]
+      },
+      {
+        q: "How do you classify and protect sensitive data?",
+        options: [
+          { text: "No data classification; sensitive data location is largely unknown", level: 1 },
+          { text: "Basic data classification policy exists; manual labeling in some areas", level: 2 },
+          { text: "Automated data discovery and classification; DLP policies enforced across endpoints and cloud", level: 3 },
+          { text: "ML-driven classification, rights management (IRM), automated data governance, and full data lineage tracking", level: 4 }
+        ]
+      },
+      {
+        q: "What is your approach to data encryption?",
+        options: [
+          { text: "Encryption not systematically applied; data at rest and in transit may be unencrypted", level: 1 },
+          { text: "Encryption enabled for email and some file shares; BitLocker on most endpoints", level: 2 },
+          { text: "Encryption at rest and in transit for all sensitive data; key management procedures documented", level: 3 },
+          { text: "End-to-end encryption, customer-managed keys, HSM-backed key management, and crypto-agility program", level: 4 }
+        ]
+      },
+      {
+        q: "How do you handle data retention and disposal?",
+        options: [
+          { text: "No formal retention policies; data accumulates indefinitely", level: 1 },
+          { text: "Basic retention policies defined; manual enforcement for some data types", level: 2 },
+          { text: "Automated retention policies, legal hold capabilities, and verified secure disposal", level: 3 },
+          { text: "Intelligent data lifecycle management with automated tiering, policy-driven disposal, and full audit trail", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage database availability and integrity?",
+        options: [
+          { text: "Standalone database servers; no high availability; manual integrity checks", level: 1 },
+          { text: "Database clustering or log shipping for critical databases; scheduled integrity checks", level: 2 },
+          { text: "Always-on availability groups, automated failover, and continuous integrity monitoring", level: 3 },
+          { text: "Globally distributed databases, automated sharding, self-healing, and real-time anomaly detection", level: 4 }
+        ]
+      }
+    ]
+  },
+  {
+    id: "itprocess",
+    title: "IT Process & Governance",
+    icon: "⚙️",
+    iconBg: "linear-gradient(135deg,#8b5cf6,#ec4899)",
+    description: "ITIL processes, change management, service desk, and IT governance",
+    questions: [
+      {
+        q: "What is the maturity of your IT service desk?",
+        options: [
+          { text: "Informal support; issues tracked via email or not tracked at all", level: 1 },
+          { text: "Ticketing system in place; basic categorization and SLA tracking", level: 2 },
+          { text: "ITIL-aligned service desk with knowledge base, self-service portal, and SLA compliance reporting", level: 3 },
+          { text: "AI-powered service desk with auto-categorization, chatbot triage, predictive analytics, and proactive outreach", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage changes to your IT environment?",
+        options: [
+          { text: "Changes made ad-hoc; no formal change management process", level: 1 },
+          { text: "Change Advisory Board (CAB) reviews major changes; basic change logging", level: 2 },
+          { text: "Formal change management with risk assessment, rollback plans, and post-implementation review", level: 3 },
+          { text: "Automated change pipelines, CI/CD integration, pre-approved standard changes, and change success analytics", level: 4 }
+        ]
+      },
+      {
+        q: "What is your approach to IT monitoring and observability?",
+        options: [
+          { text: "No proactive monitoring; issues discovered when users report them", level: 1 },
+          { text: "Basic infrastructure monitoring (CPU, disk, network) with alert thresholds", level: 2 },
+          { text: "Full-stack monitoring with APM, log analytics, and correlated dashboards", level: 3 },
+          { text: "AIOps-driven observability with anomaly detection, auto-remediation, and business-impact correlation", level: 4 }
+        ]
+      },
+      {
+        q: "How mature is your IT budgeting and cost management?",
+        options: [
+          { text: "IT spending not well tracked; budgets based on previous year plus adjustments", level: 1 },
+          { text: "Annual IT budget with basic cost center allocation; manual tracking", level: 2 },
+          { text: "IT financial management with chargeback/showback, project-level tracking, and regular forecasting", level: 3 },
+          { text: "FinOps discipline with real-time cost optimization, automated resource right-sizing, and business-value alignment", level: 4 }
+        ]
+      },
+      {
+        q: "How do you manage IT service continuity and capacity planning?",
+        options: [
+          { text: "Reactive capacity management; outages due to capacity are common", level: 1 },
+          { text: "Basic capacity monitoring; manual planning based on trends", level: 2 },
+          { text: "Capacity planning with modeling, trend analysis, and proactive scaling for known peaks", level: 3 },
+          { text: "Automated elastic scaling, ML-driven capacity forecasting, and continuous optimization", level: 4 }
+        ]
+      },
+      {
+        q: "What is the state of your IT documentation and knowledge management?",
+        options: [
+          { text: "Minimal or outdated documentation; tribal knowledge prevails", level: 1 },
+          { text: "Basic documentation in shared drives or wiki; inconsistently maintained", level: 2 },
+          { text: "Structured knowledge base with templates, review cycles, and integration with service desk", level: 3 },
+          { text: "AI-searchable knowledge platform, automated documentation generation, and continuous quality scoring", level: 4 }
+        ]
+      }
+    ]
+  }
+];
+
+// ===== RECOMMENDATIONS ENGINE =====
+const recommendations = {
+  identity: [
+    { 2: { title:"Deploy Active Directory",priority:"HIGH",effort:"High",timeline:"3–6 months",actions:["Design AD forest/domain topology based on org structure","Deploy domain controllers with DNS integration","Migrate workgroup machines to domain join (target 80%+ coverage)","Establish OU structure for delegation and Group Policy"],tools:"Active Directory Domain Services, Azure AD Connect"},
+      3: { title:"Mature AD with Full GP & Delegation",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Implement granular OU design for delegated administration","Deploy Group Policy for security baselines and software","Establish trust relationships for multi-domain scenarios","Document and enforce AD naming conventions"],tools:"Group Policy Management Console, AD Admin Center"},
+      4: { title:"Federate Identity to the Cloud",priority:"MEDIUM",effort:"High",timeline:"4–8 months",actions:["Deploy Azure AD Connect for hybrid identity","Implement SSO across SaaS and on-prem applications","Enable dynamic groups and SCIM-based provisioning","Adopt Entra ID Governance for access lifecycle"],tools:"Microsoft Entra ID, Azure AD Connect, Enterprise Apps"}},
+    { 2: { title:"Centralize Authentication via AD",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Join all endpoints to Active Directory domain","Eliminate local account usage for daily operations","Enforce password complexity policies via GPO","Establish service account management practices"],tools:"Active Directory, Group Policy"},
+      3: { title:"Deploy Multi-Factor Authentication",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Roll out MFA for all privileged accounts immediately","Extend MFA to VPN and remote access","Deploy Microsoft Authenticator or FIDO2 keys","Create conditional access policies for risky sign-ins"],tools:"Microsoft Entra MFA, Conditional Access, Authenticator"},
+      4: { title:"Implement Passwordless & Adaptive Auth",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Pilot Windows Hello for Business","Deploy FIDO2 security keys for privileged users","Implement risk-based conditional access with identity protection","Enable continuous access evaluation (CAE)"],tools:"Windows Hello for Business, FIDO2, Entra ID Protection"}},
+    { 2: { title:"Centralize Account Management in AD",priority:"HIGH",effort:"Medium",timeline:"1–2 months",actions:["Create standard provisioning procedures in AD","Establish naming conventions and default group memberships","Implement basic offboarding checklist with SLAs","Audit existing accounts to remove orphaned entries"],tools:"AD Users and Computers, PowerShell"},
+      3: { title:"Semi-Automate Provisioning with HR Feed",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Integrate HR system as authoritative identity source","Automate account creation from HR new-hire events","Define SLA for deprovisioning (disabled within 24h)","Implement regular access certification campaigns"],tools:"Microsoft Identity Manager, Azure AD Connect"},
+      4: { title:"Full Lifecycle Automation & Governance",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Deploy Entra ID Governance for entitlement management","Implement automated access reviews with manager attestation","Enable real-time deprovisioning across all connected systems","Build access packages for role-based onboarding with expiry"],tools:"Entra ID Governance, Lifecycle Workflows, Access Reviews"}},
+    { 2: { title:"Identify & Separate Privileged Accounts",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Audit all accounts with administrative privileges","Create dedicated admin accounts separate from daily-use","Remove unnecessary admin rights from standard users","Implement basic privileged account password policies"],tools:"Active Directory, LAPS, PowerShell"},
+      3: { title:"Deploy PAM Solution",priority:"HIGH",effort:"Medium",timeline:"2–4 months",actions:["Implement Privileged Access Workstations (PAWs)","Deploy LAPS for local admin password management","Enable just-in-time (JIT) access for admin roles","Implement session recording for privileged activities"],tools:"Microsoft LAPS, Entra PIM, PAW architecture"},
+      4: { title:"Zero Standing Privileges",priority:"MEDIUM",effort:"High",timeline:"6–12 months",actions:["Eliminate all permanent admin assignments — enforce JIT","Implement approval workflows and time-bound role activation","Deploy real-time anomaly detection for privileged sessions","Integrate privileged access with SIEM for behavioral analytics"],tools:"Entra PIM, Microsoft Sentinel, Defender for Identity"}},
+    { 2: { title:"Group-Based Access in AD",priority:"MEDIUM",effort:"Low",timeline:"1–2 months",actions:["Map application access to AD security groups","Migrate apps from local credentials to AD authentication","Document access requirements per application","Establish group naming conventions and ownership"],tools:"Active Directory Groups, Application SSO"},
+      3: { title:"Implement RBAC with Access Reviews",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Define role taxonomy aligned with job functions","Map roles to application entitlements across all systems","Implement quarterly access reviews with owner attestation","Deploy automated alerts for access anomalies"],tools:"Entra ID Governance, Access Reviews, Role Management"},
+      4: { title:"Attribute-Based & Dynamic Access Control",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement ABAC policies using device, location, and risk signals","Deploy automated least-privilege enforcement","Enable dynamic access scoping based on real-time context","Integrate access decisions with threat intelligence"],tools:"Conditional Access, Entra ID Protection, ABAC Policies"}},
+    { 2: { title:"Establish Guest Account Process",priority:"LOW",effort:"Low",timeline:"1 month",actions:["Create dedicated OU and policies for partner accounts","Define lifecycle management with expiry dates","Restrict guest accounts to necessary resources only","Implement basic monitoring of guest activity"],tools:"Active Directory, Group Policy"},
+      3: { title:"Deploy Azure AD B2B Federation",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Enable Azure AD B2B for partner collaboration","Configure federation with key partner organizations","Implement governance policies for guest invitations","Deploy conditional access for external identities"],tools:"Entra External ID, B2B Collaboration, Conditional Access"},
+      4: { title:"Automated Cross-Org Governance",priority:"LOW",effort:"High",timeline:"4–6 months",actions:["Deploy entitlement management with access packages","Implement automated guest lifecycle with sponsor reviews","Enable cross-tenant sync for strategic partnerships","Build B2C identity flows for customer-facing scenarios"],tools:"Entra ID Governance, Entitlement Management, Cross-tenant Sync"}}
+  ],
+  desktop: [
+    { 2: { title:"Standardize Image Deployment",priority:"HIGH",effort:"High",timeline:"2–4 months",actions:["Create standardized golden images per hardware platform","Deploy SCCM/MDT for task-sequence-based imaging","Establish image update schedule (monthly/quarterly)","Migrate 80%+ of machines to standardized deployment"],tools:"SCCM/MECM, MDT, Windows ADK"},
+      3: { title:"Zero-Touch Deployment",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Build fully automated task sequences with driver management","Implement app layering for departmental software","Create deployment rings for staged rollouts","Automate post-deployment validation and compliance checks"],tools:"MECM Task Sequences, Driver Packs, Application Model"},
+      4: { title:"Cloud-Based Autopilot Provisioning",priority:"MEDIUM",effort:"Medium",timeline:"3–6 months",actions:["Register devices with Windows Autopilot","Create profiles for user-driven and self-deploying scenarios","Implement Enrollment Status Page for first-run compliance","Eliminate image dependency with hardware-agnostic provisioning"],tools:"Windows Autopilot, Intune, Enrollment Status Page"}},
+    { 2: { title:"Deploy Centralized Patch Management",priority:"HIGH",effort:"Medium",timeline:"1–2 months",actions:["Deploy WSUS or SCCM SUP for centralized updates","Define patch approval schedule (Patch Tuesday +7 days)","Create computer groups for phased deployment","Establish compliance reporting and exception tracking"],tools:"WSUS, SCCM/MECM Software Update Point"},
+      3: { title:"Automated Compliance & Phased Rollouts",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Implement deployment rings (pilot → broad → production)","Automate compliance reporting with escalation","Build exception management with risk documentation","Add third-party patch management for non-MS apps"],tools:"MECM Phased Deployments, Compliance Settings, SCUP"},
+      4: { title:"Continuous Patching with Automated Testing",priority:"LOW",effort:"High",timeline:"4–6 months",actions:["Implement automated patch testing in staging","Deploy Windows Update for Business with ring-based delivery","Build real-time compliance dashboards with drift alerting","Enable automatic rollback for problematic updates"],tools:"Windows Update for Business, Intune, Update Compliance"}},
+    { 2: { title:"Standardize Server Builds",priority:"HIGH",effort:"Medium",timeline:"2–3 months",actions:["Create standardized templates for each server role","Implement basic monitoring across all servers","Establish manual change management process","Document server configurations and maintain runbooks"],tools:"SCCM, SCOM, Server Templates"},
+      3: { title:"Configuration Management & Drift Detection",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Implement DSC, Ansible, or similar for declarative config","Enable drift detection with automated alerting","Establish formal change control with approval workflows","Integrate config baselines with compliance reporting"],tools:"PowerShell DSC, Ansible, Azure Automation, Azure Policy"},
+      4: { title:"Infrastructure as Code & Immutable Patterns",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Adopt IaC with Terraform/Bicep for all provisioning","Implement immutable server patterns — replace not patch","Enable auto-scaling based on workload metrics","Build self-healing automation for common failures"],tools:"Terraform, Bicep, Azure Resource Manager, Autoscale"}},
+    { 2: { title:"Deploy Discovery & Inventory Tools",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Deploy SCCM or Intune discovery for HW/SW inventory","Establish baseline of all endpoints and servers","Implement basic software metering for license compliance","Create asset reports for lifecycle tracking"],tools:"MECM Discovery, Intune, MAP Toolkit"},
+      3: { title:"Build CMDB with Automated Discovery",priority:"MEDIUM",effort:"Medium",timeline:"3–5 months",actions:["Implement CMDB as authoritative asset source","Automate discovery feeds from multiple sources","Establish software license compliance and optimization","Define asset lifecycle stages with triggers"],tools:"ServiceNow CMDB, MECM Asset Intelligence"},
+      4: { title:"Real-Time Asset Intelligence",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Deploy real-time asset intelligence with financial dashboards","Implement predictive replacement based on failure trends","Automate procurement triggers from lifecycle policies","Enable AI-driven software optimization and license harvesting"],tools:"ServiceNow ITAM, Flexera, Snow Software, Power BI"}},
+    { 2: { title:"Deploy Basic MDM",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Deploy Intune for corporate-owned devices","Enforce ActiveSync policies for mobile email","Implement device encryption and PIN requirements","Block non-compliant devices from corporate resources"],tools:"Microsoft Intune, Exchange ActiveSync"},
+      3: { title:"Full MDM/MAM with Conditional Access",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Extend to MAM for BYOD data protection","Implement app protection policies (cut/copy/encrypt)","Deploy conditional access requiring device compliance","Enable remote wipe of corporate data on personal devices"],tools:"Intune MAM, App Protection, Conditional Access"},
+      4: { title:"Unified Endpoint Management & Zero Trust",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Implement UEM for all platforms from one console","Deploy device trust scoring for conditional access","Enable app-level containerization for all BYOD","Integrate device compliance with ZTNA decisions"],tools:"Intune Suite, Defender for Endpoint, ZTNA"}},
+    { 2: { title:"Implement App Compatibility Toolkit",priority:"LOW",effort:"Low",timeline:"1–2 months",actions:["Deploy ACT for compatibility testing before OS migration","Create app portfolio with compatibility status","Identify virtualization candidates (legacy, conflicts)","Add compatibility testing to OS upgrade workflow"],tools:"App Compatibility Toolkit, Test Base"},
+      3: { title:"Systematic Virtualization & CI/CD Testing",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Deploy App-V or MSIX for problematic applications","Integrate compatibility testing into CI/CD pipeline","Establish automated regression testing for LOB apps","Create self-service app request with auto packaging"],tools:"App-V, MSIX, Azure DevOps, Test Base"},
+      4: { title:"Cloud Desktops & Universal App Delivery",priority:"MEDIUM",effort:"High",timeline:"6–12 months",actions:["Deploy Azure Virtual Desktop or Windows 365","Implement universal app delivery with self-service catalog","Enable per-user app assignment with dynamic delivery","Migrate legacy apps to cloud-hosted desktop"],tools:"Azure Virtual Desktop, Windows 365, MSIX, Intune"}}
+  ],
+  security: [
+    { 2: { title:"Deploy Managed Endpoint Protection",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Deploy Defender for Endpoint across all endpoints","Establish central management console for policies","Enable real-time and cloud-delivered protection","Create baseline security policy for all devices"],tools:"Defender for Endpoint, MECM, Intune"},
+      3: { title:"Implement EDR with Threat Hunting",priority:"HIGH",effort:"Medium",timeline:"2–4 months",actions:["Enable EDR with behavioral analysis and ASR rules","Implement automated investigation and response","Establish regular threat hunting with advanced queries","Deploy attack surface reduction and exploit protection"],tools:"Defender for Endpoint P2, Advanced Hunting, ASR"},
+      4: { title:"XDR Platform Integration",priority:"MEDIUM",effort:"High",timeline:"4–8 months",actions:["Integrate endpoint, email, identity, cloud into unified XDR","Enable cross-domain automated investigation","Implement deception technology (honeypots)","Deploy MITRE ATT&CK mapping and coverage analysis"],tools:"Microsoft 365 Defender, Sentinel, MITRE ATT&CK"}},
+    { 2: { title:"Implement Basic Network Segmentation",priority:"HIGH",effort:"Medium",timeline:"2–4 months",actions:["Design VLAN architecture for DMZ, internal, guest zones","Implement firewall rules with deny-by-default","Deploy 802.1X for wired and wireless NAC","Document network topology and traffic flows"],tools:"VLANs, Next-Gen Firewalls, 802.1X"},
+      3: { title:"Deploy Micro-Segmentation & NGFW",priority:"MEDIUM",effort:"High",timeline:"3–6 months",actions:["Implement micro-segmentation based on data sensitivity","Deploy NGFW with application-aware rules and TLS inspection","Enable IDS/IPS with behavioral detection rules","Implement NAC with posture assessment"],tools:"NSX, Azure Firewall, Palo Alto, Cisco ISE"},
+      4: { title:"Zero Trust Network Access",priority:"MEDIUM",effort:"High",timeline:"6–12 months",actions:["Implement ZTNA replacing traditional VPN","Deploy software-defined perimeter with per-session tunnels","Enable continuous network verification with trust signals","Integrate network access with identity and device compliance"],tools:"Entra Private Access, Zscaler, Cloudflare Access"}},
+    { 2: { title:"Establish Regular Vulnerability Scanning",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Deploy vulnerability scanner across all assets","Schedule weekly or bi-weekly scans","Create manual remediation tracking with owners","Establish monthly vulnerability review meetings"],tools:"Defender Vulnerability Management, Qualys, Nessus"},
+      3: { title:"Continuous Scanning with Risk Prioritization",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Move to continuous/daily scanning across all assets","Implement risk-based prioritization (CVSS + criticality)","Define SLA-driven remediation timelines by severity","Build exception process with risk acceptance documentation"],tools:"Defender TVM, CVSS, Risk-Based Prioritization"},
+      4: { title:"Automated Vuln Management in CI/CD",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Integrate scanning into CI/CD for pre-deployment checks","Deploy external attack surface management","Correlate vulns with threat intelligence for context","Automate patching for known vulnerability classes"],tools:"Azure DevOps Security, EASM, Threat Intel Feeds"}},
+    { 2: { title:"Deploy Centralized Logging & Alerting",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Deploy SIEM ingesting key log sources","Configure alerting on known attack signatures","Establish log retention meeting compliance requirements","Create on-call rotation for alert triage"],tools:"Microsoft Sentinel, Syslog, Windows Event Forwarding"},
+      3: { title:"SIEM with SOC & Incident Response",priority:"HIGH",effort:"High",timeline:"3–6 months",actions:["Implement SIEM correlation rules covering MITRE ATT&CK","Establish dedicated SOC (internal or MSSP) for 24/7","Document IR procedures with top-scenario playbooks","Conduct regular tabletop exercises and IR drills"],tools:"Microsoft Sentinel, SOC Operations, IR Playbooks"},
+      4: { title:"AI-Driven SOAR & Threat Intelligence",priority:"MEDIUM",effort:"High",timeline:"6–12 months",actions:["Deploy SOAR with automated playbooks for common incidents","Integrate threat intelligence feeds for proactive detection","Enable ML anomaly detection and UEBA","Implement purple teaming for detection validation"],tools:"Sentinel SOAR, UEBA, Threat Intelligence Platforms"}},
+    { 2: { title:"Deploy Email Security Gateway",priority:"HIGH",effort:"Low",timeline:"1 month",actions:["Implement anti-spam/anti-malware gateway for all email","Configure basic DLP rules for outbound sensitive data","Enable SPF, DKIM, and DMARC for domain protection","Deploy email quarantine with admin review"],tools:"Exchange Online Protection, DMARC, DLP"},
+      3: { title:"Advanced Threat Protection & User Training",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Enable Safe Links and Safe Attachments","Deploy anti-phishing with impersonation protection","Implement Attack Simulator for phishing awareness","Enable enhanced filtering for mail connectors"],tools:"Defender for Office 365, Attack Simulator"},
+      4: { title:"CASB & Real-Time Collaboration Monitoring",priority:"LOW",effort:"High",timeline:"4–6 months",actions:["Deploy Defender for Cloud Apps as CASB","Enable real-time session monitoring for sensitive scenarios","Implement automated threat remediation (auto-purge)","Extend DLP to Teams, SharePoint, and third-party apps"],tools:"Defender for Cloud Apps, Session Policies, Auto-Purge"}},
+    { 2: { title:"Document Security Policies",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Develop core security policies (AUP, password, data, IR)","Conduct baseline compliance assessment (NIST, CIS, ISO)","Implement annual risk assessment process","Establish security awareness training for all staff"],tools:"Compliance Manager, Policy Templates, LMS"},
+      3: { title:"Continuous Compliance & Automated Enforcement",priority:"MEDIUM",effort:"Medium",timeline:"3–5 months",actions:["Deploy Compliance Manager for continuous scoring","Implement automated enforcement via Intune and CA","Establish regular third-party audit cadence","Enable automated evidence collection for audits"],tools:"Compliance Manager, Intune, Azure Policy"},
+      4: { title:"Integrated GRC with Real-Time Dashboards",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Deploy GRC platform integrating risk and compliance","Build real-time compliance dashboards for executives","Implement automated regulatory change management","Enable continuous control monitoring with alerting"],tools:"GRC Platform (ServiceNow, Archer), Power BI"}}
+  ],
+  dataprotection: [
+    { 2: { title:"Implement Scheduled Backup Solution",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Deploy centralized backup for critical servers","Define retention policies based on criticality and compliance","Implement regular backup verification and test restores","Document backup architecture and recovery procedures"],tools:"Azure Backup, Veeam, System Center DPM"},
+      3: { title:"Centralized Backup with Verified RPO/RTO",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Extend coverage to all servers, databases, and SaaS","Implement automated backup verification","Establish offsite copies for 3-2-1 compliance","Define RPO/RTO tiers aligned with business impact"],tools:"Azure Backup, Offsite Replication, BIA Framework"},
+      4: { title:"Continuous Protection & Immutable Backups",priority:"MEDIUM",effort:"High",timeline:"4–8 months",actions:["Implement CDP for tier-1 workloads","Enable immutable backup storage against ransomware","Deploy air-gapped copies for critical data","Automate DR orchestration with runbook-based failover"],tools:"CDP Solutions, Immutable Storage, Azure Site Recovery"}},
+    { 2: { title:"Document DR Plan for Critical Systems",priority:"HIGH",effort:"Medium",timeline:"1–3 months",actions:["Conduct business impact analysis for RTO/RPO targets","Document recovery procedures for each critical system","Identify DR site or cloud recovery target","Conduct initial DR test to validate procedures"],tools:"BIA Templates, DR Plan Documentation"},
+      3: { title:"Regular DR Testing with Automated Failover",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Implement automated replication for tier-1 systems","Establish quarterly DR testing with documented results","Deploy automated failover for databases and critical apps","Define and meet RTO/RPO targets per system tier"],tools:"Azure Site Recovery, SQL Always On, Hyper-V Replica"},
+      4: { title:"Fully Automated DR & Chaos Engineering",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement fully automated DR with one-click failover","Deploy continuous replication for sub-hour RTO","Adopt chaos engineering for resilience testing","Enable automated runbooks for hands-free failover"],tools:"Azure Site Recovery, Chaos Studio, Automated Runbooks"}},
+    { 2: { title:"Define Basic Data Classification",priority:"HIGH",effort:"Low",timeline:"1–2 months",actions:["Define taxonomy (Public, Internal, Confidential, Restricted)","Communicate policy and train employees on labeling","Implement manual labeling tools in Office apps","Run initial discovery scan for sensitive data locations"],tools:"Microsoft Information Protection, Sensitivity Labels"},
+      3: { title:"Automated Discovery & DLP Enforcement",priority:"HIGH",effort:"Medium",timeline:"2–4 months",actions:["Deploy automated discovery and classification","Implement DLP preventing exfiltration via email, USB, cloud","Enable automatic labeling based on content inspection","Establish DLP incident review and tuning process"],tools:"Microsoft Purview, DLP Policies, Auto-Labeling"},
+      4: { title:"ML-Driven Classification & Data Governance",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement ML trainable classifiers for org-specific data","Deploy Azure Information Protection with IRM","Enable automated governance with lineage tracking","Build data catalog with ownership and quality scoring"],tools:"Purview Data Governance, Trainable Classifiers, IRM"}},
+    { 2: { title:"Enable Standard Encryption",priority:"HIGH",effort:"Low",timeline:"1 month",actions:["Enable BitLocker on all endpoints via GPO/Intune","Enforce TLS 1.2+ for web and email","Enable encryption for email transport and at-rest","Encrypt file shares containing sensitive data"],tools:"BitLocker, TLS Configuration, Exchange Encryption"},
+      3: { title:"Comprehensive Encryption with Key Management",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Extend encryption at rest to all databases and storage","Implement centralized key management with procedures","Enable encryption in transit for all communications","Establish key rotation and certificate lifecycle management"],tools:"Azure Key Vault, Certificate Services, TDE"},
+      4: { title:"E2E Encryption with HSM & Crypto-Agility",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Deploy HSM-backed key management for sensitive workloads","Implement customer-managed keys (BYOK) for cloud services","Enable end-to-end encryption for sensitive workflows","Establish crypto-agility for post-quantum readiness"],tools:"Azure Dedicated HSM, BYOK, Post-Quantum Readiness"}},
+    { 2: { title:"Define Retention Policies",priority:"MEDIUM",effort:"Low",timeline:"1–2 months",actions:["Develop retention policy aligned with regulations","Define schedules by data type and business purpose","Implement manual enforcement with periodic audits","Establish secure disposal procedures"],tools:"Retention Policy Templates, Secure Disposal"},
+      3: { title:"Automated Retention & Legal Hold",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Deploy automated retention labels in M365 and file servers","Implement legal hold for litigation preservation","Enable verified secure disposal with certificates","Create retention dashboards for compliance"],tools:"Microsoft Purview Retention, Legal Hold"},
+      4: { title:"Intelligent Data Lifecycle Management",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Implement intelligent tiering (hot/cool/archive)","Deploy policy-driven disposal with full audit trail","Enable automated compliance checks before disposal","Build lifecycle analytics for cost and risk optimization"],tools:"Purview Data Lifecycle, Azure Storage Tiering"}},
+    { 2: { title:"Implement Database Clustering",priority:"HIGH",effort:"Medium",timeline:"2–3 months",actions:["Deploy SQL Always On or clustering for critical DBs","Implement log shipping for secondary copies","Schedule regular DBCC CHECKDB and maintenance","Establish database backup with point-in-time recovery"],tools:"SQL Always On, Log Shipping, DBCC, Maintenance Plans"},
+      3: { title:"Always On AG with Automated Failover",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Deploy Availability Groups with automatic failover","Implement continuous integrity monitoring and alerting","Establish performance baselines with proactive tuning","Create runbooks for common recovery scenarios"],tools:"SQL Always On AG, Performance Monitor, Query Store"},
+      4: { title:"Globally Distributed & Self-Healing",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Evaluate migration to distributed DBs (Cosmos DB, SQL MI)","Implement automated sharding for scalability","Deploy self-healing for common DB issues","Enable real-time anomaly detection for integrity"],tools:"Azure SQL MI, Cosmos DB, Elastic Pools, Intelligent Insights"}}
+  ],
+  itprocess: [
+    { 2: { title:"Deploy Ticketing System",priority:"HIGH",effort:"Medium",timeline:"1–2 months",actions:["Implement ITSM platform (ServiceNow, Jira SM, etc.)","Define categories, priorities, and SLA targets","Establish reporting on volume, resolution, SLA compliance","Create SOPs for common request types"],tools:"ServiceNow, Jira Service Management, Freshservice"},
+      3: { title:"ITIL-Aligned Service Desk with Self-Service",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Align processes with ITIL (incident, request, problem, change)","Build knowledge base with searchable articles","Deploy self-service portal for common requests","Implement SLA compliance reporting with escalation"],tools:"ITSM Platform, Knowledge Base, Self-Service Portal"},
+      4: { title:"AI-Powered Service Desk",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement AI auto-categorization and routing","Deploy chatbot for tier-0 support","Enable predictive analytics for proactive issues","Build proactive outreach for known issues"],tools:"AI Chatbot, Predictive Analytics, Virtual Agent"}},
+    { 2: { title:"Establish Change Advisory Board",priority:"HIGH",effort:"Low",timeline:"1 month",actions:["Create formal change management policy","Establish CAB with regular meeting cadence","Implement change logging in ticketing system","Define emergency change procedures"],tools:"ITSM Change Module, CAB Process"},
+      3: { title:"Formal Change Process with Risk Assessment",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Implement risk assessment matrix for all changes","Require documented rollback plans before approval","Establish post-implementation review process","Track change success rate and failed change causes"],tools:"ITSM Change Module, Risk Assessment Templates"},
+      4: { title:"Automated Change Pipelines & CI/CD",priority:"MEDIUM",effort:"High",timeline:"4–8 months",actions:["Define standard changes with pre-approved automation","Integrate change management with CI/CD approvals","Implement change success analytics and lead-time metrics","Enable automated rollback from health check failures"],tools:"Azure DevOps, CI/CD Pipelines, Automated Gates"}},
+    { 2: { title:"Deploy Infrastructure Monitoring",priority:"HIGH",effort:"Medium",timeline:"1–2 months",actions:["Deploy monitoring for CPU, memory, disk, network","Configure alert thresholds for critical components","Establish on-call rotation for alert response","Create basic operational dashboards"],tools:"SCOM, Azure Monitor, Zabbix, Datadog"},
+      3: { title:"Full-Stack Monitoring with APM",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Extend monitoring to application layer with APM","Implement centralized log analytics with correlation","Build service-health dashboards across layers","Enable synthetic monitoring for critical user journeys"],tools:"Application Insights, Log Analytics, Grafana"},
+      4: { title:"AIOps with Auto-Remediation",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement AIOps for anomaly detection and noise reduction","Build auto-remediation runbooks for common issues","Enable business-impact correlation for alerts","Deploy predictive alerting before user impact"],tools:"AIOps Platform, Azure Automation, Business Service Maps"}},
+    { 2: { title:"Establish IT Budget with Cost Centers",priority:"MEDIUM",effort:"Low",timeline:"1–2 months",actions:["Create formal IT budget with line items","Implement basic cost center allocation","Establish actual vs. budget variance tracking","Create quarterly budget review cadence"],tools:"Excel/Power BI, Cost Center Structure"},
+      3: { title:"IT Financial Management & Showback",priority:"MEDIUM",effort:"Medium",timeline:"2–4 months",actions:["Implement chargeback/showback model","Enable project-level budget tracking","Establish regular forecasting with variance analysis","Build IT cost dashboards with trending"],tools:"IT Financial Management Tools, Power BI"},
+      4: { title:"FinOps Discipline & Real-Time Optimization",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Adopt FinOps with real-time cloud cost visibility","Implement automated right-sizing and cleanup","Align IT investment with business value metrics","Enable predictive cost modeling for capacity"],tools:"Azure Cost Management, FinOps Framework"}},
+    { 2: { title:"Implement Basic Capacity Monitoring",priority:"MEDIUM",effort:"Low",timeline:"1 month",actions:["Deploy capacity monitoring for compute, storage, network","Establish manual planning based on trend analysis","Create capacity thresholds with alerting","Document capacity requirements for growth"],tools:"Monitoring Tools, Capacity Spreadsheets"},
+      3: { title:"Capacity Modeling & Proactive Scaling",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Implement capacity modeling with growth projections","Enable trend analysis with predictive forecasting","Plan proactive scaling for known peaks","Integrate capacity data with procurement and budget"],tools:"Capacity Planning Tools, Trend Analysis, Power BI"},
+      4: { title:"Elastic Scaling & ML-Driven Forecasting",priority:"LOW",effort:"High",timeline:"4–8 months",actions:["Implement automated elastic scaling for cloud workloads","Deploy ML-driven capacity forecasting","Enable continuous optimization balancing perf and cost","Build self-service scaling within guardrails"],tools:"Azure Autoscale, ML Forecasting, Self-Service Scaling"}},
+    { 2: { title:"Establish Centralized Documentation",priority:"MEDIUM",effort:"Low",timeline:"1–2 months",actions:["Deploy docs platform (Confluence, SharePoint, Wiki)","Create templates for runbooks and procedures","Migrate critical tribal knowledge to writing","Assign documentation ownership per tech area"],tools:"Confluence, SharePoint, Wiki.js"},
+      3: { title:"Structured KB with Review Cycles",priority:"MEDIUM",effort:"Medium",timeline:"2–3 months",actions:["Implement KB integrated with service desk","Establish quarterly review cycles with owners","Link KB articles to incident and request tickets","Track article usage and maintain freshness scoring"],tools:"ITSM Knowledge Module, Review Workflows"},
+      4: { title:"AI-Searchable Knowledge Platform",priority:"LOW",effort:"High",timeline:"6–12 months",actions:["Implement AI-powered search across all repos","Enable automated doc generation from IaC and config","Deploy continuous quality scoring with stale alerting","Build intelligent recommendations during incidents"],tools:"Azure AI Search, Copilot, Auto-Doc Generation"}}
+  ]
+};
+
+// ===== STATE MANAGEMENT =====
+const STORAGE_KEY = 'coreio_assessment';
+let answers = {};
+let currentSection = null;
+
+function loadProgress() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) answers = JSON.parse(saved);
+  } catch(e) { answers = {}; }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(answers));
+    showToast('Progress saved');
+  } catch(e) {}
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastText').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ===== RENDERING =====
+function renderNav() {
+  const nav = document.getElementById('navSection');
+  let html = `<div class="nav-item ${!currentSection ? 'active' : ''}" onclick="showWelcome()">
+    <div class="nav-dot"></div>Overview<span class="nav-count">—</span></div>`;
+  assessmentData.forEach(s => {
+    const answered = s.questions.filter((_,i) => answers[s.id+'_'+i] !== undefined).length;
+    const total = s.questions.length;
+    const completed = answered === total;
+    html += `<div class="nav-item ${currentSection===s.id?'active':''} ${completed?'completed':''}" onclick="showSection('${s.id}')">
+      <div class="nav-dot"></div>${s.title}<span class="nav-count">${answered}/${total}</span></div>`;
+  });
+  nav.innerHTML = html;
+}
+
+function updateProgress() {
+  let total = 0, answered = 0;
+  assessmentData.forEach(s => {
+    s.questions.forEach((_,i) => { total++; if(answers[s.id+'_'+i] !== undefined) answered++; });
+  });
+  document.getElementById('progressText').textContent = `${answered} / ${total} answered`;
+  document.getElementById('progressFill').style.width = total ? (answered/total*100)+'%' : '0%';
+  updateScore();
+}
+
+function updateScore() {
+  let totalPoints = 0, maxPoints = 0, answeredCount = 0;
+  assessmentData.forEach(s => {
+    s.questions.forEach((_,i) => {
+      const key = s.id+'_'+i;
+      if(answers[key] !== undefined) {
+        totalPoints += answers[key];
+        answeredCount++;
+      }
+      maxPoints += 4;
+    });
+  });
+  
+  const circle = document.getElementById('scoreCircle');
+  const val = document.getElementById('scoreValue');
+  const label = document.getElementById('maturityLabel');
+  
+  if(answeredCount === 0) {
+    circle.style.strokeDashoffset = 264;
+    val.textContent = '—';
+    label.innerHTML = '';
+    return;
+  }
+  
+  const avg = totalPoints / answeredCount;
+  const pct = (avg - 1) / 3;
+  circle.style.strokeDashoffset = 264 - (264 * pct);
+  val.textContent = avg.toFixed(1);
+  
+  let maturity, cls;
+  if(avg < 1.75) { maturity = 'Basic'; cls = 'basic'; }
+  else if(avg < 2.5) { maturity = 'Standardized'; cls = 'standardized'; }
+  else if(avg < 3.25) { maturity = 'Rationalized'; cls = 'rationalized'; }
+  else { maturity = 'Dynamic'; cls = 'dynamic'; }
+  
+  label.innerHTML = `<span class="maturity-label maturity-${cls}">${maturity}</span>`;
+}
+
+function showWelcome() {
+  currentSection = null;
+  renderNav();
+  const content = document.getElementById('contentArea');
+  content.innerHTML = `
+    <div class="section">
+      <div class="welcome">
+        <h2>Infrastructure Optimization Assessment</h2>
+        <p>Evaluate your organization's IT infrastructure maturity across 5 capability areas using Microsoft's Core Infrastructure Optimization model.</p>
+        <p style="font-size:12px;color:var(--text-dim);margin-top:6px">30 questions · ~15 minutes · Progress auto-saved</p>
+        <div class="legend">
+          <div class="legend-item legend-basic">Basic<span>Level 1</span></div>
+          <div class="legend-item legend-standard">Standardized<span>Level 2</span></div>
+          <div class="legend-item legend-rational">Rationalized<span>Level 3</span></div>
+          <div class="legend-item legend-dynamic">Dynamic<span>Level 4</span></div>
+        </div>
+        <button class="btn btn-primary" onclick="showSection('${assessmentData[0].id}')">
+          Begin Assessment
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+
+function showSection(id) {
+  currentSection = id;
+  renderNav();
+  const s = assessmentData.find(x => x.id === id);
+  const idx = assessmentData.indexOf(s);
+  
+  let qHTML = '';
+  s.questions.forEach((q, i) => {
+    const key = s.id + '_' + i;
+    const answered = answers[key] !== undefined;
+    qHTML += `<div class="question ${answered?'answered':''}" id="q_${key}">
+      <div class="question-num">Q${i+1} of ${s.questions.length}</div>
+      <div class="question-text">${q.q}</div>
+      <div class="options">`;
+    q.options.forEach((o, oi) => {
+      const sel = answers[key] === o.level;
+      const levelLabels = {1:'BASIC',2:'STANDARD',3:'RATIONAL',4:'DYNAMIC'};
+      qHTML += `<div class="option ${sel?'selected':''}" onclick="selectOption('${key}',${o.level},this)">
+        <div class="option-radio"></div>
+        <span>${o.text}</span>
+        <span class="option-level level-${o.level}">${levelLabels[o.level]}</span>
+      </div>`;
+    });
+    qHTML += `</div></div>`;
+  });
+  
+  const prev = idx > 0 ? assessmentData[idx-1] : null;
+  const next = idx < assessmentData.length-1 ? assessmentData[idx+1] : null;
+  
+  document.getElementById('contentArea').innerHTML = `
+    <div class="section">
+      <div class="section-header">
+        <div class="section-icon" style="background:${s.iconBg}">${s.icon}</div>
+        <div>
+          <h2>${s.title}</h2>
+          <p>${s.description}</p>
+        </div>
+      </div>
+      ${qHTML}
+      <div class="section-nav">
+        ${prev ? `<button class="btn btn-outline" onclick="showSection('${prev.id}')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+          ${prev.title}</button>` : '<div></div>'}
+        ${next ? `<button class="btn btn-primary" onclick="showSection('${next.id}')">
+          ${next.title}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </button>` : `<button class="btn btn-success" onclick="exportReport()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          Export Report</button>`}
+      </div>
+    </div>`;
+  
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function selectOption(key, level, el) {
+  answers[key] = level;
+  saveProgress();
+  
+  const q = el.closest('.question');
+  q.classList.add('answered');
+  q.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  
+  updateProgress();
+  renderNav();
+}
+
+// ===== GAP ANALYSIS =====
+function showGapAnalysis() {
+  let totalAnswered = 0;
+  assessmentData.forEach(s => s.questions.forEach((_,i) => {
+    if(answers[s.id+'_'+i] !== undefined) totalAnswered++;
+  }));
+  
+  if(totalAnswered === 0) {
+    alert('Please answer at least one question before viewing the gap analysis.');
+    return;
+  }
+  
+  currentSection = '__gaps__';
+  renderNav();
+  
+  const priorityOrder = {HIGH:0,MEDIUM:1,LOW:2};
+  const priorityColors = {HIGH:'var(--red)',MEDIUM:'var(--amber)',LOW:'var(--green)'};
+  const priorityBg = {HIGH:'rgba(239,68,68,.1)',MEDIUM:'rgba(245,158,11,.1)',LOW:'rgba(16,185,129,.1)'};
+  const effortColors = {Low:'var(--green)',Medium:'var(--amber)',High:'var(--red)'};
+  const effortBg = {Low:'rgba(16,185,129,.1)',Medium:'rgba(245,158,11,.1)',High:'rgba(239,68,68,.1)'};
+  
+  let allRecs = [];
+  assessmentData.forEach((s, si) => {
+    s.questions.forEach((q, qi) => {
+      const key = s.id + '_' + qi;
+      const currentLevel = answers[key];
+      if(currentLevel === undefined || currentLevel >= 4) return;
+      
+      const sectionRecs = recommendations[s.id];
+      if(!sectionRecs || !sectionRecs[qi]) return;
+      
+      const nextLevel = currentLevel + 1;
+      const rec = sectionRecs[qi][nextLevel];
+      if(!rec) return;
+      
+      allRecs.push({
+        section: s.title,
+        sectionIcon: s.icon,
+        sectionId: s.id,
+        question: q.q,
+        currentLevel: currentLevel,
+        targetLevel: nextLevel,
+        ...rec
+      });
+    });
+  });
+  
+  // Sort by priority
+  allRecs.sort((a,b) => (priorityOrder[a.priority]||2) - (priorityOrder[b.priority]||2));
+  
+  const highCount = allRecs.filter(r=>r.priority==='HIGH').length;
+  const medCount = allRecs.filter(r=>r.priority==='MEDIUM').length;
+  const lowCount = allRecs.filter(r=>r.priority==='LOW').length;
+  const levelNames = {1:'Basic',2:'Standardized',3:'Rationalized',4:'Dynamic'};
+  const levelColors = {1:'var(--red)',2:'var(--amber)',3:'var(--accent)',4:'var(--green)'};
+  const levelBg = {1:'rgba(239,68,68,.1)',2:'rgba(245,158,11,.1)',3:'rgba(59,130,246,.1)',4:'rgba(16,185,129,.1)'};
+  
+  let recsHTML = '';
+  
+  if(allRecs.length === 0) {
+    recsHTML = `<div style="text-align:center;padding:60px 20px">
+      <div style="font-size:48px;margin-bottom:16px">🎉</div>
+      <h3 style="font-size:20px;font-weight:700;margin-bottom:8px">No Gaps Detected</h3>
+      <p style="color:var(--text-muted)">All answered questions are at the Dynamic (Level 4) maturity. Outstanding!</p>
+    </div>`;
+  } else {
+    allRecs.forEach((r, idx) => {
+      recsHTML += `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px;
+        border-left:3px solid ${priorityColors[r.priority]};transition:all .2s;background:var(--surface2)"
+        onmouseover="this.style.borderColor='${priorityColors[r.priority]}'" onmouseout="this.style.borderColor='var(--border)';this.style.borderLeftColor='${priorityColors[r.priority]}'">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:16px">${r.sectionIcon}</span>
+          <span style="font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace">${r.section}</span>
+          <span style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:10px;padding:3px 8px;border-radius:4px;font-weight:600;font-family:'JetBrains Mono',monospace;background:${priorityBg[r.priority]};color:${priorityColors[r.priority]}">${r.priority}</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;background:${effortBg[r.effort]};color:${effortColors[r.effort]}">Effort: ${r.effort}</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;background:rgba(6,182,212,.1);color:var(--cyan)">⏱ ${r.timeline}</span>
+          </span>
+        </div>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:6px">${r.title}</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">${r.question}</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <span style="font-size:11px;padding:3px 10px;border-radius:12px;font-weight:600;background:${levelBg[r.currentLevel]};color:${levelColors[r.currentLevel]}">${levelNames[r.currentLevel]}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <span style="font-size:11px;padding:3px 10px;border-radius:12px;font-weight:600;background:${levelBg[r.targetLevel]};color:${levelColors[r.targetLevel]}">${levelNames[r.targetLevel]}</span>
+        </div>
+        <div style="background:var(--surface);border-radius:8px;padding:14px;margin-bottom:10px">
+          <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Recommended Actions</div>
+          ${r.actions.map((a,ai) => `<div style="display:flex;gap:8px;margin-bottom:6px;font-size:13px;color:var(--text);line-height:1.5">
+            <span style="color:var(--accent);flex-shrink:0;margin-top:2px">▸</span>
+            <span>${a}</span>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text-dim)">
+          <span style="font-weight:600;color:var(--text-muted)">Tools:</span> ${r.tools}
+        </div>
+      </div>`;
+    });
+  }
+  
+  document.getElementById('contentArea').innerHTML = `
+    <div class="section" style="animation:fadeIn .3s ease">
+      <div class="section-header">
+        <div class="section-icon" style="background:linear-gradient(135deg,var(--purple),var(--accent));color:#fff;font-size:20px">📊</div>
+        <div>
+          <h2>Gap Analysis & Recommendations</h2>
+          <p>Prioritized actions to advance your infrastructure maturity</p>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px">
+        <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:var(--radius);padding:16px;text-align:center">
+          <div style="font-size:28px;font-weight:800;color:var(--red);font-family:'JetBrains Mono',monospace">${highCount}</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">High Priority</div>
+        </div>
+        <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:var(--radius);padding:16px;text-align:center">
+          <div style="font-size:28px;font-weight:800;color:var(--amber);font-family:'JetBrains Mono',monospace">${medCount}</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Medium Priority</div>
+        </div>
+        <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.15);border-radius:var(--radius);padding:16px;text-align:center">
+          <div style="font-size:28px;font-weight:800;color:var(--green);font-family:'JetBrains Mono',monospace">${lowCount}</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Low Priority</div>
+        </div>
+      </div>
+      
+      ${allRecs.length > 0 ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;font-family:'JetBrains Mono',monospace">
+        ${allRecs.length} recommendation${allRecs.length!==1?'s':''} · Sorted by priority · Each shows next-level improvement
+      </div>` : ''}
+      
+      ${recsHTML}
+    </div>`;
+  
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function resetAssessment() {
+  if(!confirm('Reset all answers? This cannot be undone.')) return;
+  answers = {};
+  localStorage.removeItem(STORAGE_KEY);
+  showWelcome();
+  updateProgress();
+  renderNav();
+  showToast('Assessment reset');
+}
+
+// ===== EXPORT REPORT =====
+function exportReport() {
+  let totalAnswered = 0, totalPoints = 0;
+  assessmentData.forEach(s => s.questions.forEach((_,i) => {
+    const key = s.id+'_'+i;
+    if(answers[key] !== undefined) { totalAnswered++; totalPoints += answers[key]; }
+  }));
+  
+  if(totalAnswered === 0) { alert('Please answer at least one question before exporting.'); return; }
+  
+  const overallAvg = totalPoints / totalAnswered;
+  let maturity;
+  if(overallAvg < 1.75) maturity = 'Basic';
+  else if(overallAvg < 2.5) maturity = 'Standardized';
+  else if(overallAvg < 3.25) maturity = 'Rationalized';
+  else maturity = 'Dynamic';
+  
+  const matColors = {Basic:'#ef4444',Standardized:'#f59e0b',Rationalized:'#3b82f6',Dynamic:'#10b981'};
+  const levelNames = {1:'Basic',2:'Standardized',3:'Rationalized',4:'Dynamic'};
+  
+  let sectionsHTML = '';
+  assessmentData.forEach(s => {
+    let sPoints = 0, sAnswered = 0;
+    let qRows = '';
+    s.questions.forEach((q, i) => {
+      const key = s.id+'_'+i;
+      const val = answers[key];
+      if(val !== undefined) { sPoints += val; sAnswered++; }
+      const selectedOption = val !== undefined ? q.options.find(o => o.level === val) : null;
+      qRows += `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151">${q.q}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;white-space:nowrap">
+          ${val !== undefined ? `<span style="background:${matColors[levelNames[val]]}20;color:${matColors[levelNames[val]]};padding:3px 10px;border-radius:12px;font-weight:600;font-size:12px">${levelNames[val]}</span>` : '<span style="color:#9ca3af">—</span>'}
+        </td>
+      </tr>`;
+    });
+    
+    const sAvg = sAnswered > 0 ? (sPoints/sAnswered) : 0;
+    let sMat = 'N/A';
+    if(sAnswered > 0) {
+      if(sAvg < 1.75) sMat = 'Basic';
+      else if(sAvg < 2.5) sMat = 'Standardized';
+      else if(sAvg < 3.25) sMat = 'Rationalized';
+      else sMat = 'Dynamic';
+    }
+    
+    const barWidth = sAnswered > 0 ? ((sAvg-1)/3*100) : 0;
+    
+    sectionsHTML += `
+      <div style="margin-bottom:32px;page-break-inside:avoid">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:24px">${s.icon}</span>
+          <div>
+            <h3 style="margin:0;font-size:18px;color:#111827">${s.title}</h3>
+            <p style="margin:2px 0 0;font-size:12px;color:#6b7280">${s.description}</p>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div style="font-size:22px;font-weight:700;color:${sAnswered>0?matColors[sMat]:'#9ca3af'}">${sAvg.toFixed(1)}</div>
+            <div style="font-size:11px;color:#6b7280">${sMat}</div>
+          </div>
+        </div>
+        <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-bottom:16px">
+          <div style="height:100%;width:${barWidth}%;background:${sAnswered>0?matColors[sMat]:'#d1d5db'};border-radius:3px"></div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+          <thead><tr style="background:#f9fafb">
+            <th style="padding:10px 12px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb">Question</th>
+            <th style="padding:10px 12px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;width:120px">Level</th>
+          </tr></thead>
+          <tbody>${qRows}</tbody>
+        </table>
+      </div>`;
+  });
+  
+  // Category scores for summary chart
+  let summaryBars = '';
+  assessmentData.forEach(s => {
+    let sp=0,sa=0;
+    s.questions.forEach((_,i)=>{const k=s.id+'_'+i;if(answers[k]!==undefined){sp+=answers[k];sa++;}});
+    const avg=sa>0?(sp/sa):0;
+    let m='N/A';if(sa>0){if(avg<1.75)m='Basic';else if(avg<2.5)m='Standardized';else if(avg<3.25)m='Rationalized';else m='Dynamic';}
+    const w=sa>0?((avg-1)/3*100):0;
+    summaryBars += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="width:200px;font-size:13px;color:#374151;font-weight:500">${s.title}</div>
+      <div style="flex:1;height:24px;background:#f3f4f6;border-radius:4px;position:relative">
+        <div style="height:100%;width:${w}%;background:${sa>0?matColors[m]:'#d1d5db'};border-radius:4px;transition:width .3s"></div>
+        <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;color:#374151">${avg.toFixed(1)}</span>
+      </div>
+      <div style="width:90px;text-align:center"><span style="background:${sa>0?matColors[m]+'20':'#f3f4f6'};color:${sa>0?matColors[m]:'#9ca3af'};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600">${m}</span></div>
+    </div>`;
+  });
+  
+  const now = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  
+  const reportHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Core IO Assessment Report — ${now}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;color:#111827;background:#fff;padding:40px;max-width:900px;margin:0 auto;line-height:1.6}
+  @media print{body{padding:20px}div{page-break-inside:avoid}}
+</style></head><body>
+  <div style="text-align:center;margin-bottom:40px;padding-bottom:30px;border-bottom:2px solid #e5e7eb">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#6b7280;margin-bottom:8px">Microsoft Core IO Model</div>
+    <h1 style="font-size:28px;font-weight:800;color:#111827;margin-bottom:4px">Infrastructure Optimization Report</h1>
+    <p style="font-size:14px;color:#6b7280">${now} · ${totalAnswered} of 30 questions answered</p>
+  </div>
+  
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:28px;margin-bottom:36px;text-align:center">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:12px">Overall Maturity Score</div>
+    <div style="font-size:48px;font-weight:800;color:${matColors[maturity]}">${overallAvg.toFixed(1)}<span style="font-size:20px;color:#9ca3af"> / 4.0</span></div>
+    <div style="display:inline-block;margin-top:8px;background:${matColors[maturity]}20;color:${matColors[maturity]};padding:6px 20px;border-radius:20px;font-weight:700;font-size:14px">${maturity}</div>
+  </div>
+  
+  <div style="margin-bottom:36px">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;color:#111827">Category Summary</h2>
+    ${summaryBars}
+  </div>
+  
+  <h2 style="font-size:18px;font-weight:700;margin-bottom:20px;color:#111827">Detailed Results</h2>
+  ${sectionsHTML}
+  
+  <div style="margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af">
+    Generated by Core IO Assessment Tool · Based on Microsoft Core Infrastructure Optimization Model
+  </div>
+</body></html>`;
+  
+  // Build recommendations for export
+  const levelNames2 = {1:'Basic',2:'Standardized',3:'Rationalized',4:'Dynamic'};
+  const matColors2 = {Basic:'#ef4444',Standardized:'#f59e0b',Rationalized:'#3b82f6',Dynamic:'#10b981'};
+  const prioColors = {HIGH:'#ef4444',MEDIUM:'#f59e0b',LOW:'#10b981'};
+  let recsExport = [];
+  assessmentData.forEach(s => {
+    s.questions.forEach((q,i) => {
+      const key = s.id+'_'+i;
+      const lvl = answers[key];
+      if(lvl === undefined || lvl >= 4) return;
+      const sRecs = recommendations[s.id];
+      if(!sRecs || !sRecs[i]) return;
+      const rec = sRecs[i][lvl+1];
+      if(!rec) return;
+      recsExport.push({section:s.title,icon:s.icon,question:q.q,current:lvl,target:lvl+1,...rec});
+    });
+  });
+  recsExport.sort((a,b) => ({HIGH:0,MEDIUM:1,LOW:2}[a.priority]||2) - ({HIGH:0,MEDIUM:1,LOW:2}[b.priority]||2));
+  
+  let recsHTML2 = '';
+  if(recsExport.length > 0) {
+    recsHTML2 = `<div style="page-break-before:always;margin-top:40px">
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:20px;color:#111827">📊 Gap Analysis & Recommendations</h2>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:20px">${recsExport.length} gaps identified. Each recommendation targets the next maturity level improvement. Sorted by priority.</p>`;
+    recsExport.forEach(r => {
+      recsHTML2 += `<div style="border:1px solid #e5e7eb;border-left:3px solid ${prioColors[r.priority]};border-radius:8px;padding:16px;margin-bottom:12px;page-break-inside:avoid">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:14px">${r.icon}</span>
+          <span style="font-size:11px;color:#6b7280">${r.section}</span>
+          <span style="margin-left:auto;display:flex;gap:4px">
+            <span style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;background:${prioColors[r.priority]}15;color:${prioColors[r.priority]}">${r.priority}</span>
+            <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:#f3f4f6;color:#374151">⏱ ${r.timeline}</span>
+          </span>
+        </div>
+        <h3 style="font-size:15px;font-weight:700;margin:0 0 4px;color:#111827">${r.title}</h3>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:10px">${r.question}</p>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:11px">
+          <span style="padding:2px 8px;border-radius:10px;font-weight:600;background:${matColors2[levelNames2[r.current]]}15;color:${matColors2[levelNames2[r.current]]}">${levelNames2[r.current]}</span>
+          <span style="color:#9ca3af">→</span>
+          <span style="padding:2px 8px;border-radius:10px;font-weight:600;background:${matColors2[levelNames2[r.target]]}15;color:${matColors2[levelNames2[r.target]]}">${levelNames2[r.target]}</span>
+        </div>
+        <div style="background:#f9fafb;border-radius:6px;padding:12px;margin-bottom:8px">
+          ${r.actions.map(a => `<div style="font-size:12px;color:#374151;margin-bottom:4px;padding-left:12px;text-indent:-12px">▸ ${a}</div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:#9ca3af"><strong style="color:#6b7280">Tools:</strong> ${r.tools}</div>
+      </div>`;
+    });
+    recsHTML2 += `</div>`;
+  }
+  
+  // Insert recommendations before the footer in the report
+  const footerMarker = 'Generated by Core IO Assessment Tool';
+  const footerIdx = reportHTML.lastIndexOf(footerMarker);
+  let finalReport = reportHTML;
+  if(recsExport.length > 0 && footerIdx > -1) {
+    // Find the start of the footer div
+    const divStart = reportHTML.lastIndexOf('<div', footerIdx);
+    finalReport = reportHTML.slice(0, divStart) + recsHTML2 + reportHTML.slice(divStart);
+  }
+  
+  const blob = new Blob([finalReport], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `CoreIO_Report_${new Date().toISOString().slice(0,10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Report exported');
+}
+
+// ===== INIT =====
+loadProgress();
+renderNav();
+updateProgress();
+showWelcome();
+</script>
+</body>
+</html>
